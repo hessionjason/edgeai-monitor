@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdgeAI Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0a0f;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+        .header {
+            background: linear-gradient(135deg, #0d1117, #161b22);
+            border-bottom: 1px solid #21c55e33;
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 {
+            font-size: 1.4rem;
+            color: #21c55e;
+            letter-spacing: 2px;
+        }
+        .header h1 span { color: #666; }
+        .status-badge {
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .status-healthy { background: #21c55e22; color: #21c55e; border: 1px solid #21c55e44; }
+        .status-warning { background: #f59e0b22; color: #f59e0b; border: 1px solid #f59e0b44; }
+        .status-critical { background: #ef444422; color: #ef4444; border: 1px solid #ef444444; }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            padding: 24px 40px;
+        }
+        .card {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 12px;
+            padding: 20px;
+            transition: border-color 0.3s;
+        }
+        .card:hover { border-color: #21c55e44; }
+        .card-label {
+            font-size: 0.7rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 8px;
+        }
+        .card-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #e0e0e0;
+        }
+        .card-unit { font-size: 0.9rem; color: #555; }
+        .card.anomaly { border-color: #ef4444; background: #ef444410; }
+        .card.anomaly .card-value { color: #ef4444; }
+
+        .charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            padding: 0 40px 24px;
+        }
+        .chart-container {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 12px;
+            padding: 20px;
+        }
+        .chart-title {
+            font-size: 0.75rem;
+            color: #666;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 12px;
+        }
+        canvas { width: 100% !important; height: 200px !important; }
+
+        .anomaly-log {
+            padding: 0 40px 40px;
+        }
+        .log-box {
+            background: #161b22;
+            border: 1px solid #21262d;
+            border-radius: 12px;
+            padding: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .log-entry {
+            font-size: 0.8rem;
+            padding: 4px 0;
+            border-bottom: 1px solid #21262d;
+        }
+        .log-entry.alert { color: #ef4444; }
+        .log-entry.normal { color: #21c55e; }
+
+        .ai-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #8b5cf6, #6366f1);
+            color: white;
+            font-size: 0.65rem;
+            padding: 3px 8px;
+            border-radius: 4px;
+            margin-left: 10px;
+            letter-spacing: 1px;
+        }
+
+        @media (max-width: 900px) {
+            .grid { grid-template-columns: repeat(2, 1fr); }
+            .charts { grid-template-columns: 1fr; }
+        }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+</head>
+<body>
+    <div class="header">
+        <h1>EDGE<span>AI</span> MONITOR <span class="ai-badge">AI ANOMALY DETECTION</span></h1>
+        <div id="status" class="status-badge status-healthy">HEALTHY</div>
+    </div>
+
+    <div class="grid">
+        <div class="card" id="card-temp">
+            <div class="card-label">Temperature</div>
+            <div class="card-value"><span id="val-temp">--</span><span class="card-unit"> C</span></div>
+        </div>
+        <div class="card" id="card-volt">
+            <div class="card-label">Voltage</div>
+            <div class="card-value"><span id="val-volt">--</span><span class="card-unit"> V</span></div>
+        </div>
+        <div class="card" id="card-mem">
+            <div class="card-label">Memory</div>
+            <div class="card-value"><span id="val-mem">--</span><span class="card-unit"> %</span></div>
+        </div>
+        <div class="card" id="card-cpu">
+            <div class="card-label">CPU Load</div>
+            <div class="card-value"><span id="val-cpu">--</span><span class="card-unit"> %</span></div>
+        </div>
+    </div>
+
+    <div class="charts">
+        <div class="chart-container">
+            <div class="chart-title">Temperature & Voltage</div>
+            <canvas id="chart1"></canvas>
+        </div>
+        <div class="chart-container">
+            <div class="chart-title">Memory & CPU + Anomaly Score</div>
+            <canvas id="chart2"></canvas>
+        </div>
+    </div>
+
+    <div class="anomaly-log">
+        <div class="chart-title" style="color:#666; letter-spacing:2px; font-size:0.75rem; margin-bottom:12px;">
+            ANOMALY LOG
+        </div>
+        <div class="log-box" id="log-box"></div>
+    </div>
+
+    <script>
+        const MAX_POINTS = 60;
+        const labels = [];
+        const tempData = [], voltData = [], memData = [], cpuData = [], scoreData = [];
+
+        const chart1 = new Chart(document.getElementById('chart1'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Temp (C)', data: tempData, borderColor: '#ef4444', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                    { label: 'Voltage (V x10)', data: voltData, borderColor: '#f59e0b', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                ]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: { display: false },
+                    y: { grid: { color: '#21262d' }, ticks: { color: '#555' } }
+                },
+                plugins: { legend: { labels: { color: '#666', boxWidth: 12 } } }
+            }
+        });
+
+        const chart2 = new Chart(document.getElementById('chart2'), {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    { label: 'Memory (%)', data: memData, borderColor: '#21c55e', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                    { label: 'CPU (%)', data: cpuData, borderColor: '#6366f1', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+                    { label: 'Anomaly Score', data: scoreData, borderColor: '#ef444488', borderWidth: 1, pointRadius: 0, borderDash: [4,4], tension: 0.3 },
+                ]
+            },
+            options: {
+                responsive: true,
+                animation: false,
+                scales: {
+                    x: { display: false },
+                    y: { grid: { color: '#21262d' }, ticks: { color: '#555' } }
+                },
+                plugins: { legend: { labels: { color: '#666', boxWidth: 12 } } }
+            }
+        });
+
+        let tick = 0;
+        async function poll() {
+            try {
+                const res = await fetch('/api/data');
+                const d = await res.json();
+
+                document.getElementById('val-temp').textContent = d.temperature.toFixed(1);
+                document.getElementById('val-volt').textContent = d.voltage.toFixed(2);
+                document.getElementById('val-mem').textContent = d.memory.toFixed(1);
+                document.getElementById('val-cpu').textContent = d.cpu.toFixed(1);
+
+                // Highlight anomaly cards
+                ['temp', 'volt', 'mem', 'cpu'].forEach(k => {
+                    document.getElementById('card-' + k).classList.remove('anomaly');
+                });
+                if (d.is_anomaly) {
+                    if (d.temperature > 65) document.getElementById('card-temp').classList.add('anomaly');
+                    if (d.voltage < 2.5 || d.voltage > 4.5) document.getElementById('card-volt').classList.add('anomaly');
+                    if (d.memory > 80) document.getElementById('card-mem').classList.add('anomaly');
+                    if (d.cpu > 80) document.getElementById('card-cpu').classList.add('anomaly');
+                }
+
+                // Update charts
+                tick++;
+                labels.push(tick);
+                tempData.push(d.temperature);
+                voltData.push(d.voltage * 10);
+                memData.push(d.memory);
+                cpuData.push(d.cpu);
+                scoreData.push(d.anomaly_score * -20 + 50);
+
+                if (labels.length > MAX_POINTS) {
+                    labels.shift(); tempData.shift(); voltData.shift();
+                    memData.shift(); cpuData.shift(); scoreData.shift();
+                }
+                chart1.update();
+                chart2.update();
+
+                // Log
+                const logBox = document.getElementById('log-box');
+                const time = new Date().toLocaleTimeString();
+                const entry = document.createElement('div');
+                entry.className = 'log-entry ' + (d.is_anomaly ? 'alert' : 'normal');
+                entry.textContent = `[${time}] score=${d.anomaly_score} | temp=${d.temperature.toFixed(1)} volt=${d.voltage.toFixed(2)} mem=${d.memory.toFixed(1)}% cpu=${d.cpu.toFixed(1)}%` +
+                    (d.is_anomaly ? '  *** ANOMALY DETECTED ***' : '');
+                logBox.prepend(entry);
+                if (logBox.children.length > 50) logBox.lastChild.remove();
+
+                // Status
+                const statusRes = await fetch('/api/status');
+                const status = await statusRes.json();
+                const badge = document.getElementById('status');
+                badge.textContent = status.status.toUpperCase();
+                badge.className = 'status-badge status-' + status.status;
+
+            } catch (e) { console.error(e); }
+        }
+
+        setInterval(poll, 1000);
+        poll();
+    </script>
+</body>
+</html>
